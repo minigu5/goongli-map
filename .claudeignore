@@ -1,0 +1,20 @@
+# 토큰 절약: 읽을 필요 없는 디렉터리/파일은 무시
+node_modules/
+.next/
+out/
+build/
+dist/
+.vercel/
+.git/
+
+# 패키지 잠금 파일 (대용량, 직접 읽을 필요 없음)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# 환경/로그
+.env*.local
+*.log
+
+# 원본 자료 (대용량 PDF)
+2025학년도 신입생 교육 자료집.pdf
