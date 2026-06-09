@@ -3,6 +3,10 @@
 대구과학고등학교 **궁리관**·**거경관**의 실험 용품을 빠르게 찾기 위한 지도 웹사이트 **"궁리맵"**.
 학생들이 위키처럼 자율적으로 실험 용품을 지도에 추가·수정·이동할 수 있다.
 
+- **GitHub**: https://github.com/minigu5/goongli-map
+- **Firebase 프로젝트**: `goongli-map`
+- **Cloudinary Cloud**: `duz2xx21s` (upload preset: `goongli-map`)
+
 ---
 
 ## 1. 핵심 목표
@@ -218,7 +222,7 @@ science_map/
 5. ✅ 핀 표시/추가/이동/수정/삭제 (수정 모드).
 6. ✅ Cloudinary 이미지 업로드(압축).
 7. ✅ 검색(OR 통합 검색).
-8. ⬜ Vercel 배포 (키 입력 후 진행).
+8. ✅ Vercel 배포 (GitHub 연동 → 환경변수 입력 후 자동 배포).
 
 ---
 
