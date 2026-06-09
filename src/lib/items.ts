@@ -32,6 +32,8 @@ function toItem(id: string, data: Record<string, unknown>): Item {
     pos_y: data.pos_y as number,
     image_url: (data.image_url as string | null) ?? null,
     image_public_id: (data.image_public_id as string | null) ?? null,
+    pin_w: (data.pin_w as number | null | undefined) ?? null,
+    pin_h: (data.pin_h as number | null | undefined) ?? null,
     created_by: (data.created_by as string | null) ?? null,
     updated_by: (data.updated_by as string | null) ?? null,
     created_at: ts(data.created_at),
@@ -118,5 +120,7 @@ function normalize(input: ItemInput) {
     pos_y: input.pos_y,
     image_url: input.image_url,
     image_public_id: input.image_public_id,
+    ...(input.pin_w != null ? { pin_w: input.pin_w } : {}),
+    ...(input.pin_h != null ? { pin_h: input.pin_h } : {}),
   };
 }

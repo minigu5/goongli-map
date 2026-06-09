@@ -273,3 +273,33 @@ export function getFloorPlan(
 ): FloorPlan | undefined {
   return PLANS[`${building}-${floor}`];
 }
+
+// 클릭 좌표(0~1)가 속한 방 이름을 반환. 방 우선, 없으면 다른 셀
+export function getRoomAt(
+  plan: FloorPlan,
+  x: number,
+  y: number
+): string | null {
+  const px = x * 100;
+  const py = y * 100;
+  // 일반 방(kind 없음 = room)을 우선 탐색
+  for (const cell of plan.cells) {
+    if (cell.kind && cell.kind !== "room") continue;
+    if (
+      px >= cell.x && px < cell.x + cell.w &&
+      py >= cell.y && py < cell.y + cell.h
+    ) {
+      return cell.label || null;
+    }
+  }
+  // 폴백: 모든 셀 탐색
+  for (const cell of plan.cells) {
+    if (
+      px >= cell.x && px < cell.x + cell.w &&
+      py >= cell.y && py < cell.y + cell.h
+    ) {
+      return cell.label || null;
+    }
+  }
+  return null;
+}

@@ -13,6 +13,8 @@ export interface Item {
   pos_y: number; // 0~1
   image_url: string | null;
   image_public_id: string | null;
+  pin_w: number | null; // 핀 가로 크기 (px, 기본 3)
+  pin_h: number | null; // 핀 세로 크기 (px, 기본 3)
   created_by: string | null;
   updated_by: string | null;
   created_at: string;
@@ -32,4 +34,6 @@ export interface ItemInput {
   pos_y: number;
   image_url: string | null;
   image_public_id: string | null;
+  pin_w?: number;
+  pin_h?: number;
 }

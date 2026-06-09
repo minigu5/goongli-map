@@ -40,6 +40,8 @@ export default function ItemForm({ initial, onSave, onCancel }: Props) {
   const [imagePublicId, setImagePublicId] = useState<string | null>(
     initial.image_public_id ?? null
   );
+  const [pinW, setPinW] = useState(initial.pin_w ?? 3);
+  const [pinH, setPinH] = useState(initial.pin_h ?? 3);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +87,8 @@ export default function ItemForm({ initial, onSave, onCancel }: Props) {
           pos_y: initial.pos_y,
           image_url: imageUrl,
           image_public_id: imagePublicId,
+          pin_w: pinW,
+          pin_h: pinH,
         },
         initial.id
       );
@@ -176,6 +180,45 @@ export default function ItemForm({ initial, onSave, onCancel }: Props) {
             <p className="mt-1 text-xs text-gray-400">
               검색이 잘 되도록 관련 단어를 많이 넣어 주세요.
             </p>
+          </Field>
+
+          <Field label="핀 크기 (px)">
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                가로
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  step={1}
+                  value={pinW}
+                  onChange={(e) => setPinW(Number(e.target.value))}
+                  className="form-input w-20"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                세로
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  step={1}
+                  value={pinH}
+                  onChange={(e) => setPinH(Number(e.target.value))}
+                  className="form-input w-20"
+                />
+              </label>
+              <span
+                style={{
+                  display: "inline-block",
+                  width: pinW,
+                  height: pinH,
+                  background: "#2563eb",
+                  border: "1px solid #93c5fd",
+                }}
+                title="핀 미리보기"
+              />
+            </div>
           </Field>
 
           <Field label="이미지">

@@ -8,7 +8,7 @@ import ItemCard from "@/components/ItemCard";
 import ItemForm from "@/components/ItemForm";
 import AuthButton from "@/components/AuthButton";
 import { buildingName, getFloor, type BuildingId } from "@/lib/buildings";
-import { getFloorPlan } from "@/lib/floorplans";
+import { getFloorPlan, getRoomAt } from "@/lib/floorplans";
 import type { Item, ItemInput } from "@/lib/types";
 import {
   createItem,
@@ -112,7 +112,16 @@ export default function Home() {
   function handleAddAt(x: number, y: number) {
     if (!canEdit) return;
     setSelected(null);
-    setForm({ initial: { building, floor, pos_x: x, pos_y: y } });
+    const detectedRoom = getRoomAt(plan, x, y);
+    setForm({
+      initial: {
+        building,
+        floor,
+        pos_x: x,
+        pos_y: y,
+        room: detectedRoom ?? undefined,
+      },
+    });
   }
 
   function handleEdit(it: Item) {
@@ -216,8 +225,6 @@ export default function Home() {
           </div>
           <MapView
             plan={plan}
-            zone={floorInfo.zone}
-            floor={floor}
             resetKey={`${building}-${floor}`}
             items={floorItems}
             editMode={canEdit}
