@@ -30,6 +30,7 @@ function toItem(id: string, data: Record<string, unknown>): Item {
     room: (data.room as string | null) ?? null,
     pos_x: data.pos_x as number,
     pos_y: data.pos_y as number,
+    shelf: (data.shelf as number | null | undefined) ?? null,
     image_url: (data.image_url as string | null) ?? null,
     image_public_id: (data.image_public_id as string | null) ?? null,
     pin_w: (data.pin_w as number | null | undefined) ?? null,
@@ -77,7 +78,7 @@ export async function updateItem(
     updated_by: email,
     updated_at: serverTimestamp(),
   };
-  for (const [k, v] of Object.entries(input)) patch[k] = v;
+  for (const [k, v] of Object.entries(input)) if (v !== undefined) patch[k] = v;
   const ref = doc(db, "items", id);
   await updateDoc(ref, patch);
   const snap = await getDoc(ref);
@@ -96,6 +97,20 @@ export async function updateItemPosition(
   await updateDoc(doc(db, "items", id), {
     pos_x,
     pos_y,
+    updated_by: email,
+    updated_at: serverTimestamp(),
+  });
+}
+
+export async function updateItemShelf(
+  id: string,
+  shelf: number,
+  email: string | null
+): Promise<void> {
+  const db = getFirebaseDb();
+  if (!db) throw new Error("Firebase 미설정");
+  await updateDoc(doc(db, "items", id), {
+    shelf,
     updated_by: email,
     updated_at: serverTimestamp(),
   });
@@ -120,6 +135,7 @@ function normalize(input: ItemInput) {
     pos_y: input.pos_y,
     image_url: input.image_url,
     image_public_id: input.image_public_id,
+    ...(input.shelf != null ? { shelf: input.shelf } : {}),
     ...(input.pin_w != null ? { pin_w: input.pin_w } : {}),
     ...(input.pin_h != null ? { pin_h: input.pin_h } : {}),
   };

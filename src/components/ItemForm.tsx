@@ -40,7 +40,8 @@ export default function ItemForm({ initial, onSave, onCancel }: Props) {
   const [imagePublicId, setImagePublicId] = useState<string | null>(
     initial.image_public_id ?? null
   );
-  const [pinW, setPinW] = useState(initial.pin_w ?? 3);
+  const [shelf, setShelf] = useState<number | "">(initial.shelf ?? "");
+  const [pinW, setPinW] = useState(initial.pin_w ?? 6);
   const [pinH, setPinH] = useState(initial.pin_h ?? 3);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -85,6 +86,7 @@ export default function ItemForm({ initial, onSave, onCancel }: Props) {
           room,
           pos_x: initial.pos_x,
           pos_y: initial.pos_y,
+          shelf: shelf !== "" ? shelf : undefined,
           image_url: imageUrl,
           image_public_id: imagePublicId,
           pin_w: pinW,
@@ -167,6 +169,26 @@ export default function ItemForm({ initial, onSave, onCancel }: Props) {
               placeholder="예: 물리실험실1"
               className="form-input"
             />
+          </Field>
+
+          <Field label="수납장 층">
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={1}
+                max={50}
+                step={1}
+                value={shelf}
+                onChange={(e) =>
+                  setShelf(e.target.value === "" ? "" : Number(e.target.value))
+                }
+                placeholder="예: 1"
+                className="form-input w-24"
+              />
+              <span className="text-xs text-gray-400">
+                같은 위치에 여러 층이 있을 때 입력 (선택)
+              </span>
+            </div>
           </Field>
 
           <Field label="카테고리">

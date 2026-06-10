@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MapView from "@/components/MapView";
 import FloorSwitcher from "@/components/FloorSwitcher";
 import SearchBar from "@/components/SearchBar";
-import ItemCard from "@/components/ItemCard";
+import CabinetCard from "@/components/CabinetCard";
 import ItemForm from "@/components/ItemForm";
 import AuthButton from "@/components/AuthButton";
 import { buildingName, getFloor, type BuildingId } from "@/lib/buildings";
-import { getFloorPlan, getRoomAt } from "@/lib/floorplans";
+import { getFloorPlan, getRoomAt, getCellAt } from "@/lib/floorplans";
 import type { Item, ItemInput } from "@/lib/types";
 import {
   createItem,
@@ -16,9 +16,14 @@ import {
   fetchItems,
   updateItem,
   updateItemPosition,
+  updateItemShelf,
 } from "@/lib/items";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "@/lib/useAuth";
+
+function posKey(it: { pos_x: number; pos_y: number }) {
+  return `${Math.round(it.pos_x * 10000)}_${Math.round(it.pos_y * 10000)}`;
+}
 
 function searchText(it: Item): string {
   return [
@@ -48,6 +53,7 @@ interface FormState {
 export default function Home() {
   const auth = useAuth();
   const [items, setItems] = useState<Item[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [building, setBuilding] = useState<BuildingId>("gungri");
@@ -55,9 +61,17 @@ export default function Home() {
   const [editMode, setEditMode] = useState(false);
 
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<Item | null>(null);
+  const [selectedCabinet, setSelectedCabinet] = useState<Item[] | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
+  const [pendingAddPos, setPendingAddPos] = useState<{ x: number; y: number } | null>(null);
+
+  // 수납장 추가 후 재선택을 위한 pending 좌표
+  const pendingCabinetPos = useRef<{
+    building: BuildingId;
+    floor: number;
+    key: string;
+  } | null>(null);
 
   const canEdit = editMode && auth.isSchoolUser;
 
@@ -68,10 +82,42 @@ export default function Home() {
       .catch((e) => setLoadError(e.message ?? "불러오기 실패"));
   }, []);
 
-  // 학교 사용자가 아니게 되면 수정 모드 해제
   useEffect(() => {
     if (!auth.isSchoolUser) setEditMode(false);
   }, [auth.isSchoolUser]);
+
+  // 수정 모드 해제 시 대기 위치 초기화
+  useEffect(() => {
+    if (!canEdit) setPendingAddPos(null);
+  }, [canEdit]);
+
+  // 아이템 변경 시 selectedCabinet 동기화 + pendingCabinetPos 처리
+  useEffect(() => {
+    // pending: 저장 직후 해당 위치의 그룹을 다시 선택
+    const pending = pendingCabinetPos.current;
+    if (pending) {
+      pendingCabinetPos.current = null;
+      const group = items.filter(
+        (x) =>
+          x.building === pending.building &&
+          x.floor === pending.floor &&
+          posKey(x) === pending.key
+      );
+      if (group.length > 0) {
+        group.sort((a, b) => (a.shelf ?? 9999) - (b.shelf ?? 9999));
+        setSelectedCabinet(group);
+        return;
+      }
+    }
+    // 이미 열린 수납장: 동기화 (수정/삭제 반영)
+    if (!selectedCabinet) return;
+    const ids = new Set(selectedCabinet.map((it) => it.id));
+    const updated = items.filter((it) => ids.has(it.id));
+    updated.sort((a, b) => (a.shelf ?? 9999) - (b.shelf ?? 9999));
+    if (updated.length === 0) setSelectedCabinet(null);
+    else setSelectedCabinet(updated);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -93,39 +139,78 @@ export default function Home() {
     const terms = q.split(/\s+/);
     return items.filter((it) => {
       const text = searchText(it);
-      return terms.some((t) => text.includes(t)); // 하나라도 일치하면 표시
+      return terms.some((t) => text.includes(t));
     });
   }, [items, query]);
 
   const floorInfo = getFloor(building, floor)!;
   const plan = getFloorPlan(building, floor)!;
 
+  // 검색 결과 클릭: 해당 위치 수납장 그룹을 열고 핀 강조
   function goToItem(it: Item) {
     setBuilding(it.building);
     setFloor(it.floor);
-    setSelected(it);
     setHighlightId(it.id);
     setQuery("");
+    const key = posKey(it);
+    const group = items.filter(
+      (x) => x.building === it.building && x.floor === it.floor && posKey(x) === key
+    );
+    group.sort((a, b) => (a.shelf ?? 9999) - (b.shelf ?? 9999));
+    setSelectedCabinet(group.length > 0 ? group : [it]);
     setTimeout(() => setHighlightId(null), 2500);
   }
 
+  // 지도 빈 곳 클릭 → 추가 위치 대기 (2단계 확인)
   function handleAddAt(x: number, y: number) {
     if (!canEdit) return;
-    setSelected(null);
-    const detectedRoom = getRoomAt(plan, x, y);
+    const cell = getCellAt(plan, x, y);
+    if (cell && cell.kind && cell.kind !== "room") return;
+    setSelectedCabinet(null);
+    setPendingAddPos({ x, y });
+  }
+
+  // 확인 버튼 → 폼 열기
+  function handleConfirmAdd() {
+    if (!pendingAddPos) return;
+    const detectedRoom = getRoomAt(plan, pendingAddPos.x, pendingAddPos.y);
     setForm({
       initial: {
         building,
         floor,
-        pos_x: x,
-        pos_y: y,
+        pos_x: pendingAddPos.x,
+        pos_y: pendingAddPos.y,
         room: detectedRoom ?? undefined,
+      },
+    });
+    setPendingAddPos(null);
+  }
+
+  // 지도 핀 클릭 → 수납장 열기 (대기 위치 해제)
+  function handleSelectGroup(group: Item[]) {
+    setSelectedCabinet(group);
+    setPendingAddPos(null);
+  }
+
+  // CabinetCard '이 위치에 용품 추가' → 같은 좌표로 폼 열기
+  function handleAddToCabinet() {
+    if (!canEdit || !selectedCabinet || selectedCabinet.length === 0) return;
+    const rep = selectedCabinet[0];
+    setForm({
+      initial: {
+        building: rep.building,
+        floor: rep.floor,
+        pos_x: rep.pos_x,
+        pos_y: rep.pos_y,
+        room: rep.room ?? undefined,
+        pin_w: rep.pin_w ?? undefined,
+        pin_h: rep.pin_h ?? undefined,
       },
     });
   }
 
+  // CabinetCard '수정' 클릭
   function handleEdit(it: Item) {
-    setSelected(null);
     setForm({ initial: { ...it } });
   }
 
@@ -135,32 +220,62 @@ export default function Home() {
       setItems((prev) => prev.map((it) => (it.id === id ? updated : it)));
     } else {
       const created = await createItem(input, auth.email);
+      // 저장 후 해당 위치 수납장을 다시 선택하도록 pending 설정
+      pendingCabinetPos.current = {
+        building: created.building,
+        floor: created.floor,
+        key: posKey(created),
+      };
       setItems((prev) => [...prev, created]);
     }
     setForm(null);
+  }
+
+  // 수납장 내 순서 드래그 → shelf 번호를 1, 2, 3... 으로 갱신
+  async function handleReorder(reordered: Item[]) {
+    const withShelves = reordered.map((it, i) => ({ ...it, shelf: i + 1 }));
+    // 로컬 즉시 반영
+    setItems((prev) => {
+      const map = new Map(withShelves.map((it) => [it.id, it]));
+      return prev.map((it) => map.get(it.id) ?? it);
+    });
+    setSelectedCabinet(withShelves);
+    // Firestore 동기화
+    try {
+      await Promise.all(
+        withShelves.map((it) => updateItemShelf(it.id, it.shelf!, auth.email))
+      );
+    } catch {
+      /* 다음 새로고침에서 정정 */
+    }
   }
 
   async function handleDelete(it: Item) {
     if (!confirm(`"${it.name}"을(를) 삭제할까요?`)) return;
     await deleteItem(it.id);
     setItems((prev) => prev.filter((x) => x.id !== it.id));
-    setSelected(null);
   }
 
-  // 핀 드래그: 로컬 즉시 반영
-  function handleMove(id: string, x: number, y: number) {
+  // 수납장 그룹 전체 드래그 이동 (로컬 즉시 반영)
+  function handleMove(ids: string[], x: number, y: number) {
     setItems((prev) =>
-      prev.map((it) => (it.id === id ? { ...it, pos_x: x, pos_y: y } : it))
+      prev.map((it) => (ids.includes(it.id) ? { ...it, pos_x: x, pos_y: y } : it))
     );
   }
-  // 핀 드래그 종료: 저장
-  async function handleMoveEnd(id: string, x: number, y: number) {
+
+  // 드래그 종료: Firestore 저장
+  async function handleMoveEnd(ids: string[], x: number, y: number) {
     try {
-      await updateItemPosition(id, x, y, auth.email);
+      await Promise.all(ids.map((id) => updateItemPosition(id, x, y, auth.email)));
     } catch {
-      /* 실패 시 다음 새로고침에서 정정 */
+      /* 다음 새로고침에서 정정 */
     }
   }
+
+  const selectedIds = useMemo(
+    () => selectedCabinet?.map((it) => it.id) ?? [],
+    [selectedCabinet]
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -195,7 +310,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* 설정 안내 배너 */}
+      {/* 배너 */}
       {!isFirebaseConfigured && (
         <div className="bg-amber-50 px-4 py-2 text-center text-sm text-amber-800">
           환경변수가 설정되지 않아 열람·수정이 비활성화되어 있습니다. README의 설정
@@ -223,66 +338,84 @@ export default function Home() {
               {floorInfo.zone}
             </span>
           </div>
+
           <MapView
             plan={plan}
             resetKey={`${building}-${floor}`}
             items={floorItems}
             editMode={canEdit}
-            selectedId={selected?.id ?? null}
+            selectedIds={selectedIds}
             highlightId={highlightId}
-            onSelect={setSelected}
+            pendingAddPos={pendingAddPos}
+            onSelect={handleSelectGroup}
             onAddAt={handleAddAt}
             onMove={handleMove}
             onMoveEnd={handleMoveEnd}
           />
 
-          {/* 상세 카드 */}
-          {selected && (
+          {/* 추가 위치 확인 배너 */}
+          {pendingAddPos && canEdit && (
+            <div className="absolute bottom-4 left-1/2 z-30 -translate-x-1/2 flex items-center gap-3 rounded-2xl bg-blue-600 px-4 py-2.5 shadow-xl">
+              <span className="text-sm text-blue-100">위치 선택됨</span>
+              <button
+                onClick={handleConfirmAdd}
+                className="rounded-lg bg-white px-4 py-1.5 text-sm font-bold text-blue-700 hover:bg-blue-50 active:bg-blue-100"
+              >
+                + 용품 추가
+              </button>
+              <button
+                onClick={() => setPendingAddPos(null)}
+                className="text-blue-300 hover:text-white text-lg leading-none"
+                aria-label="취소"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* 수납장 카드 */}
+          {selectedCabinet && (
             <div className="absolute bottom-4 left-4 z-30">
-              <ItemCard
-                item={selected}
+              <CabinetCard
+                items={selectedCabinet}
                 canEdit={canEdit}
-                onClose={() => setSelected(null)}
+                onClose={() => setSelectedCabinet(null)}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                onAdd={handleAddToCabinet}
+                onReorder={handleReorder}
               />
             </div>
           )}
         </section>
 
-        {/* 우측 패널 */}
-        <aside className="w-56 shrink-0 overflow-auto border-l border-gray-200 bg-white p-4">
-          <FloorSwitcher
-            building={building}
-            floor={floor}
-            counts={counts}
-            onChange={(b, f) => {
-              setBuilding(b);
-              setFloor(f);
-              setSelected(null);
-            }}
-          />
-          <div className="mt-6 border-t border-gray-100 pt-4 text-xs text-gray-400">
-            <p className="font-semibold text-gray-500">과목 색상</p>
-            <div className="mt-2 flex flex-col gap-1">
-              {Object.entries({
-                물리: "#2563eb",
-                화학: "#16a34a",
-                생명: "#dc2626",
-                지구: "#9333ea",
-                공학: "#ea580c",
-              }).map(([k, v]) => (
-                <span key={k} className="flex items-center gap-2">
-                  <span
-                    className="inline-block h-3 w-3 rounded-full"
-                    style={{ background: v }}
-                  />
-                  {k}
-                </span>
-              ))}
-            </div>
-          </div>
-        </aside>
+        {/* 우측 hover 패널 */}
+        <div
+          className="absolute right-0 top-0 h-full z-20"
+          onMouseEnter={() => setSidebarOpen(true)}
+          onMouseLeave={() => setSidebarOpen(false)}
+          style={{ width: sidebarOpen ? 224 : 10 }}
+        >
+          {!sidebarOpen && (
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-20 rounded-l-full bg-gray-400/50" />
+          )}
+          <aside
+            className="absolute right-0 top-0 h-full w-56 overflow-auto bg-white/95 backdrop-blur-sm border-l border-gray-200 p-4 shadow-xl transition-transform duration-200"
+            style={{ transform: sidebarOpen ? "translateX(0)" : "translateX(100%)" }}
+          >
+            <FloorSwitcher
+              building={building}
+              floor={floor}
+              counts={counts}
+              onChange={(b, f) => {
+                setBuilding(b);
+                setFloor(f);
+                setSelectedCabinet(null);
+                setPendingAddPos(null);
+              }}
+            />
+          </aside>
+        </div>
       </main>
 
       {/* 추가/수정 폼 */}

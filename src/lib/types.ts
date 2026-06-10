@@ -11,6 +11,7 @@ export interface Item {
   room: string | null;
   pos_x: number; // 0~1
   pos_y: number; // 0~1
+  shelf: number | null; // 수납장 층 번호 (1부터 시작, 선택)
   image_url: string | null;
   image_public_id: string | null;
   pin_w: number | null; // 핀 가로 크기 (px, 기본 3)
@@ -32,6 +33,7 @@ export interface ItemInput {
   room: string;
   pos_x: number;
   pos_y: number;
+  shelf?: number;
   image_url: string | null;
   image_public_id: string | null;
   pin_w?: number;

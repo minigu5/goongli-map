@@ -16,5 +16,8 @@ pnpm-lock.yaml
 .env*.local
 *.log
 
+# 평면도 데이터 (좌표 덩어리 — 코드 작업 시 읽을 필요 없음)
+src/lib/floorplans/
+
 # 원본 자료 (대용량 PDF)
 2025학년도 신입생 교육 자료집.pdf
