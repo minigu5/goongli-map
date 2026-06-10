@@ -9,7 +9,7 @@ import ItemForm from "@/components/ItemForm";
 import AuthButton from "@/components/AuthButton";
 import { buildingName, getFloor, type BuildingId } from "@/lib/buildings";
 import { getFloorPlan, getRoomAt, getCellAt } from "@/lib/floorplans";
-import type { Item, ItemInput } from "@/lib/types";
+import type { Item, ItemInput, Decoration } from "@/lib/types";
 import {
   createItem,
   deleteItem,
@@ -18,8 +18,17 @@ import {
   updateItemPosition,
   updateItemShelf,
 } from "@/lib/items";
+import {
+  createDecoration,
+  deleteDecoration,
+  fetchDecorations,
+  updateDecorationGeometry,
+} from "@/lib/decorations";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "@/lib/useAuth";
+
+const DECO_COLORS = ["#ef4444","#f97316","#eab308","#22c55e","#3b82f6","#8b5cf6","#ec4899","#1f2937"];
+const DECO_DEFAULT = { w: 0.06, h: 0.05, opacity: 0.45 };
 
 function posKey(it: { pos_x: number; pos_y: number }) {
   return `${Math.round(it.pos_x * 10000)}_${Math.round(it.pos_y * 10000)}`;
@@ -53,10 +62,15 @@ interface FormState {
 export default function Home() {
   const auth = useAuth();
   const [items, setItems] = useState<Item[]>([]);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [decorations, setDecorations] = useState<Decoration[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [building, setBuilding] = useState<BuildingId>("gungri");
+  // 도형 추가 패널 상태
+  const [decoPanel, setDecoPanel] = useState(false);
+  const [decoShape, setDecoShape] = useState<"rect" | "circle">("rect");
+  const [decoColor, setDecoColor] = useState(DECO_COLORS[4]); // blue
+
+  const [building] = useState<BuildingId>("gungri");
   const [floor, setFloor] = useState<number>(5);
   const [editMode, setEditMode] = useState(false);
 
@@ -80,15 +94,21 @@ export default function Home() {
     fetchItems()
       .then(setItems)
       .catch((e) => setLoadError(e.message ?? "불러오기 실패"));
+    fetchDecorations()
+      .then(setDecorations)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
     if (!auth.isSchoolUser) setEditMode(false);
   }, [auth.isSchoolUser]);
 
-  // 수정 모드 해제 시 대기 위치 초기화
+  // 수정 모드 해제 시 대기 위치·도형 패널 초기화
   useEffect(() => {
-    if (!canEdit) setPendingAddPos(null);
+    if (!canEdit) {
+      setPendingAddPos(null);
+      setDecoPanel(false);
+    }
   }, [canEdit]);
 
   // 아이템 변경 시 selectedCabinet 동기화 + pendingCabinetPos 처리
@@ -133,6 +153,11 @@ export default function Home() {
     [items, building, floor]
   );
 
+  const floorDecorations = useMemo(
+    () => decorations.filter((d) => d.building === building && d.floor === floor),
+    [decorations, building, floor]
+  );
+
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
@@ -148,7 +173,6 @@ export default function Home() {
 
   // 검색 결과 클릭: 해당 위치 수납장 그룹을 열고 핀 강조
   function goToItem(it: Item) {
-    setBuilding(it.building);
     setFloor(it.floor);
     setHighlightId(it.id);
     setQuery("");
@@ -272,6 +296,46 @@ export default function Home() {
     }
   }
 
+  async function handleAddDecoration(x: number, y: number) {
+    if (!canEdit) return;
+    const input: Omit<Decoration, "id"> = {
+      building,
+      floor,
+      shape: decoShape,
+      color: decoColor,
+      x,
+      y,
+      ...DECO_DEFAULT,
+      created_by: auth.email,
+    };
+    const created = await createDecoration(input, auth.email);
+    setDecorations((prev) => [...prev, created]);
+  }
+
+  async function handleDeleteDecoration(id: string) {
+    if (!canEdit) return;
+    if (!confirm("이 도형을 삭제할까요?")) return;
+    await deleteDecoration(id);
+    setDecorations((prev) => prev.filter((d) => d.id !== id));
+  }
+
+  function handleResizeDeco(id: string, x: number, y: number, w: number, h: number) {
+    setDecorations((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, x, y, w, h } : d))
+    );
+  }
+
+  async function handleResizeDecoEnd(id: string, x: number, y: number, w: number, h: number) {
+    setDecorations((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, x, y, w, h } : d))
+    );
+    try {
+      await updateDecorationGeometry(id, x, y, w, h);
+    } catch {
+      /* 다음 새로고침에서 정정 */
+    }
+  }
+
   const selectedIds = useMemo(
     () => selectedCabinet?.map((it) => it.id) ?? [],
     [selectedCabinet]
@@ -343,15 +407,81 @@ export default function Home() {
             plan={plan}
             resetKey={`${building}-${floor}`}
             items={floorItems}
+            decorations={floorDecorations}
             editMode={canEdit}
             selectedIds={selectedIds}
             highlightId={highlightId}
             pendingAddPos={pendingAddPos}
+            decoMode={decoPanel ? { shape: decoShape, color: decoColor } : null}
             onSelect={handleSelectGroup}
             onAddAt={handleAddAt}
             onMove={handleMove}
             onMoveEnd={handleMoveEnd}
+            onAddDecoration={handleAddDecoration}
+            onDeleteDecoration={handleDeleteDecoration}
+            onResizeDeco={handleResizeDeco}
+            onResizeDecoEnd={handleResizeDecoEnd}
           />
+
+          {/* 도형 추가 패널 (수정 모드, 오른쪽 위) */}
+          {canEdit && (
+            <div className="absolute right-4 top-3 z-20">
+              {!decoPanel ? (
+                <button
+                  onClick={() => setDecoPanel(true)}
+                  className="rounded-lg bg-white/90 px-3 py-1.5 text-sm font-semibold text-gray-700 shadow hover:bg-white"
+                >
+                  + 도형 추가하기
+                </button>
+              ) : (
+                <div className="w-56 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-xl backdrop-blur-sm">
+                  <p className="mb-2 text-xs font-bold text-gray-600 uppercase tracking-wide">도형 추가</p>
+
+                  {/* 도형 종류 */}
+                  <div className="mb-3 flex gap-2">
+                    {(["rect", "circle"] as const).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setDecoShape(s)}
+                        className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-sm font-semibold transition-colors ${
+                          decoShape === s
+                            ? "border-blue-500 bg-blue-50 text-blue-700"
+                            : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                        }`}
+                      >
+                        {s === "rect" ? "▭ 직사각형" : "○ 원"}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* 색상 */}
+                  <div className="mb-3 flex flex-wrap gap-1.5">
+                    {DECO_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => setDecoColor(c)}
+                        className="h-6 w-6 rounded-full transition-transform hover:scale-110"
+                        style={{
+                          background: c,
+                          outline: decoColor === c ? `2px solid ${c}` : "none",
+                          outlineOffset: 2,
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  <p className="mb-2 text-xs text-gray-400">지도를 클릭해 도형을 배치하세요</p>
+                  <p className="mb-2 text-xs text-gray-400">기존 도형 클릭 → 삭제</p>
+                  <button
+                    onClick={() => setDecoPanel(false)}
+                    className="w-full rounded-lg bg-gray-100 py-1.5 text-sm font-semibold text-gray-600 hover:bg-gray-200"
+                  >
+                    완료
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 추가 위치 확인 배너 */}
           {pendingAddPos && canEdit && (
@@ -387,35 +517,20 @@ export default function Home() {
               />
             </div>
           )}
-        </section>
 
-        {/* 우측 hover 패널 */}
-        <div
-          className="absolute right-0 top-0 h-full z-20"
-          onMouseEnter={() => setSidebarOpen(true)}
-          onMouseLeave={() => setSidebarOpen(false)}
-          style={{ width: sidebarOpen ? 224 : 10 }}
-        >
-          {!sidebarOpen && (
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-20 rounded-l-full bg-gray-400/50" />
-          )}
-          <aside
-            className="absolute right-0 top-0 h-full w-56 overflow-auto bg-white/95 backdrop-blur-sm border-l border-gray-200 p-4 shadow-xl transition-transform duration-200"
-            style={{ transform: sidebarOpen ? "translateX(0)" : "translateX(100%)" }}
-          >
+          {/* 층 전환 패널 - 오른쪽 아래 고정 */}
+          <div className="absolute bottom-4 right-4 z-20">
             <FloorSwitcher
-              building={building}
               floor={floor}
               counts={counts}
-              onChange={(b, f) => {
-                setBuilding(b);
+              onChange={(f) => {
                 setFloor(f);
                 setSelectedCabinet(null);
                 setPendingAddPos(null);
               }}
             />
-          </aside>
-        </div>
+          </div>
+        </section>
       </main>
 
       {/* 추가/수정 폼 */}

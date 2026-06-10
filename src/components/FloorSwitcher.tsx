@@ -3,69 +3,47 @@
 import { BUILDINGS, type BuildingId } from "@/lib/buildings";
 
 interface Props {
-  building: BuildingId;
   floor: number;
-  counts: Record<string, number>; // `${building}-${floor}` -> 항목 수
-  onChange: (building: BuildingId, floor: number) => void;
+  counts: Record<string, number>;
+  onChange: (floor: number) => void;
 }
 
-export default function FloorSwitcher({
-  building,
-  floor,
-  counts,
-  onChange,
-}: Props) {
+const building = BUILDINGS[0]; // 궁리관만 사용
+
+export default function FloorSwitcher({ floor, counts, onChange }: Props) {
   return (
-    <div className="flex flex-col gap-4">
-      {/* 건물 전환 */}
-      <div className="flex rounded-lg bg-gray-100 p-1">
-        {BUILDINGS.map((b) => (
+    <div className="flex flex-col gap-1 rounded-xl bg-white/75 backdrop-blur-sm p-1.5 shadow-lg border border-gray-200/60">
+      {building.floors.map((f) => {
+        const active = f.floor === floor;
+        const count = counts[`gungri-${f.floor}`] ?? 0;
+        return (
           <button
-            key={b.id}
-            onClick={() => onChange(b.id, b.floors[0].floor)}
-            className={`flex-1 rounded-md px-2 py-1.5 text-sm font-semibold transition-colors ${
-              building === b.id
-                ? "bg-white text-gray-900 shadow"
-                : "text-gray-500 hover:text-gray-700"
+            key={f.floor}
+            onClick={() => onChange(f.floor)}
+            className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors ${
+              active
+                ? "bg-blue-500 text-white shadow-sm"
+                : "text-gray-600 hover:bg-gray-100/80"
             }`}
           >
-            {b.name}
-          </button>
-        ))}
-      </div>
-
-      {/* 층 전환 */}
-      <div className="flex flex-col gap-2">
-        {BUILDINGS.find((b) => b.id === building)!.floors.map((f) => {
-          const active = f.floor === floor;
-          const count = counts[`${building}-${f.floor}`] ?? 0;
-          return (
-            <button
-              key={f.floor}
-              onClick={() => onChange(building, f.floor)}
-              className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left transition-colors ${
-                active
-                  ? "border-blue-500 bg-blue-50 text-blue-700"
-                  : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              <span className="flex items-baseline gap-2">
-                <span className="text-lg font-bold">{f.floor}층</span>
-                <span className="text-xs text-gray-500">{f.zone}</span>
+            <span className="flex items-baseline gap-1.5">
+              <span className="text-sm font-bold">{f.floor}층</span>
+              <span className={`text-[10px] ${active ? "text-blue-100" : "text-gray-400"}`}>
+                {f.zone}
               </span>
-              {count > 0 && (
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    active ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-500"
-                  }`}
-                >
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+            </span>
+            {count > 0 && (
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                  active ? "bg-blue-400 text-white" : "bg-gray-100 text-gray-500"
+                }`}
+              >
+                {count}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

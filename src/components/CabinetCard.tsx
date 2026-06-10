@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Item } from "@/lib/types";
-import { buildingName, SUBJECT_COLORS, type Subject } from "@/lib/buildings";
+import { buildingName } from "@/lib/buildings";
 
 interface Props {
   items: Item[];
@@ -90,8 +90,7 @@ export default function CabinetCard({
               <th className="px-3 py-2 w-10">층</th>
               <th className="px-3 py-2">이름</th>
               <th className="px-3 py-2 hidden sm:table-cell">규격</th>
-              <th className="px-3 py-2">과목</th>
-              {canEdit && <th className="px-3 py-2 w-16"></th>}
+              {canEdit && <th className="px-3 py-2 w-32"></th>}
             </tr>
           </thead>
           <tbody>
@@ -140,36 +139,19 @@ export default function CabinetCard({
                     {item.spec ?? ""}
                   </td>
 
-                  {/* 과목 */}
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-1">
-                      {item.subjects.map((s) => (
-                        <span
-                          key={s}
-                          className="rounded-full px-1.5 py-0.5 text-xs font-semibold text-white"
-                          style={{
-                            background: SUBJECT_COLORS[s as Subject] ?? "#374151",
-                          }}
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-
                   {/* 수정·삭제 */}
                   {canEdit && (
                     <td className="px-3 py-2">
-                      <div className="flex gap-2">
+                      <div className="flex gap-1.5">
                         <button
                           onClick={() => onEdit(item)}
-                          className="text-xs text-blue-600 hover:underline"
+                          className="rounded-md bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-600 hover:bg-blue-100 active:bg-blue-200"
                         >
                           수정
                         </button>
                         <button
                           onClick={() => onDelete(item)}
-                          className="text-xs text-red-500 hover:underline"
+                          className="rounded-md bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-500 hover:bg-red-100 active:bg-red-200"
                         >
                           삭제
                         </button>

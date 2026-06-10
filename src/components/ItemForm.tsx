@@ -5,8 +5,7 @@ import type { Item, ItemInput } from "@/lib/types";
 import {
   buildingName,
   getFloor,
-  SUBJECTS,
-  SUBJECT_COLORS,
+  FLOOR_SUBJECTS,
   type BuildingId,
 } from "@/lib/buildings";
 import {
@@ -33,7 +32,6 @@ export default function ItemForm({ initial, onSave, onCancel }: Props) {
   const [spec, setSpec] = useState(initial.spec ?? "");
   const [categories, setCategories] = useState(initial.categories ?? "");
   const [room, setRoom] = useState(initial.room ?? "");
-  const [subjects, setSubjects] = useState<string[]>(initial.subjects ?? []);
   const [imageUrl, setImageUrl] = useState<string | null>(
     initial.image_url ?? null
   );
@@ -48,12 +46,6 @@ export default function ItemForm({ initial, onSave, onCancel }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const floorZone = getFloor(initial.building, initial.floor)?.zone ?? "";
-
-  function toggleSubject(s: string) {
-    setSubjects((prev) =>
-      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
-    );
-  }
 
   async function handleFile(file: File) {
     setError(null);
@@ -72,7 +64,6 @@ export default function ItemForm({ initial, onSave, onCancel }: Props) {
   async function handleSubmit() {
     setError(null);
     if (!name.trim()) return setError("이름은 필수입니다.");
-    if (subjects.length === 0) return setError("과목을 1개 이상 선택하세요.");
     setSaving(true);
     try {
       await onSave(
@@ -80,7 +71,7 @@ export default function ItemForm({ initial, onSave, onCancel }: Props) {
           name,
           spec,
           categories,
-          subjects,
+          subjects: FLOOR_SUBJECTS[initial.floor] ?? [],
           building: initial.building,
           floor: initial.floor,
           room,
@@ -128,29 +119,6 @@ export default function ItemForm({ initial, onSave, onCancel }: Props) {
               placeholder="예: 전자저울"
               className="form-input"
             />
-          </Field>
-
-          <Field label="과목" required>
-            <div className="flex flex-wrap gap-2">
-              {SUBJECTS.map((s) => {
-                const on = subjects.includes(s);
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => toggleSubject(s)}
-                    className="rounded-full border px-3 py-1 text-sm font-semibold transition-colors"
-                    style={{
-                      background: on ? SUBJECT_COLORS[s] : "white",
-                      color: on ? "white" : "#6b7280",
-                      borderColor: on ? SUBJECT_COLORS[s] : "#e5e7eb",
-                    }}
-                  >
-                    {s}
-                  </button>
-                );
-              })}
-            </div>
           </Field>
 
           <Field label="규격">

@@ -23,15 +23,6 @@ export const BUILDINGS: BuildingInfo[] = [
       { floor: 1, zone: "공동기기" },
     ],
   },
-  {
-    id: "geogyeong",
-    name: "거경관",
-    floors: [
-      { floor: 3, zone: "다용도존" },
-      { floor: 2, zone: "미술존" },
-      { floor: 1, zone: "음악존" },
-    ],
-  },
 ];
 
 export function getBuilding(id: BuildingId): BuildingInfo {
@@ -46,14 +37,32 @@ export function buildingName(id: BuildingId): string {
   return getBuilding(id).name;
 }
 
-// 과목 목록 (다중 선택)
+// 과목 목록
 export const SUBJECTS = ["물리", "화학", "생명", "지구", "공학"] as const;
 export type Subject = (typeof SUBJECTS)[number];
 
 export const SUBJECT_COLORS: Record<Subject, string> = {
-  물리: "#2563eb", // blue
-  화학: "#16a34a", // green
-  생명: "#dc2626", // red
-  지구: "#9333ea", // purple
-  공학: "#ea580c", // orange
+  물리: "#2563eb",
+  화학: "#16a34a",
+  생명: "#dc2626",
+  지구: "#9333ea",
+  공학: "#ea580c",
+};
+
+// 층별 핀 색상 (궁리관 기준)
+export const FLOOR_COLORS: Record<number, string> = {
+  5: "#7c3aed", // 지구과학 - violet
+  4: "#2563eb", // 물리 - blue
+  3: "#059669", // 화학 - emerald
+  2: "#dc2626", // 생명과학 - red
+  1: "#d97706", // 공동기기 - amber
+};
+
+// 층 → 과목 자동 매핑 (subjects 필드 자동 부여용)
+export const FLOOR_SUBJECTS: Record<number, string[]> = {
+  5: ["지구"],
+  4: ["물리"],
+  3: ["화학"],
+  2: ["생명"],
+  1: ["물리", "화학", "생명", "지구"],
 };

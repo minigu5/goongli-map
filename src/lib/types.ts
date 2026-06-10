@@ -1,5 +1,19 @@
 import type { BuildingId } from "./buildings";
 
+export interface Decoration {
+  id: string;
+  building: string;
+  floor: number;
+  shape: "rect" | "circle";
+  x: number;   // 중심 x (0-1)
+  y: number;   // 중심 y (0-1)
+  w: number;   // 너비 (floor map 너비 대비 0-1)
+  h: number;   // 높이 (floor map 높이 대비 0-1)
+  color: string;
+  opacity: number;
+  created_by: string | null;
+}
+
 export interface Item {
   id: string;
   name: string;

@@ -2,10 +2,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /items/{itemId} {
-      // 열람: 비로그인 포함 누구나
       allow read: if true;
+      allow create, update, delete: if request.auth != null
+        && request.auth.token.email.matches('.*@ts\\.hs\\.kr');
+    }
 
-      // 쓰기: @ts.hs.kr 계정만
+    match /decorations/{decoId} {
+      allow read: if true;
       allow create, update, delete: if request.auth != null
         && request.auth.token.email.matches('.*@ts\\.hs\\.kr');
     }
