@@ -7,6 +7,7 @@ interface Props {
   plan: FloorPlan;
   onClickMap?: (x: number, y: number) => void;
   editable?: boolean;
+  decoMode?: boolean;
 }
 
 function cellStyle(kind?: string): { bg: string; border: string } {
@@ -119,9 +120,11 @@ function isRoomCell(cell: Cell): boolean {
 }
 
 const FloorMap = forwardRef<HTMLDivElement, Props>(function FloorMap(
-  { plan, onClickMap, editable },
+  { plan, onClickMap, editable, decoMode },
   ref
 ) {
+  const pointerDownPos = React.useRef<{ x: number; y: number } | null>(null);
+
   return (
     <div
       ref={ref}
@@ -131,9 +134,13 @@ const FloorMap = forwardRef<HTMLDivElement, Props>(function FloorMap(
         containerType: "size",
         cursor: editable ? "crosshair" : "grab",
       }}
+      onPointerDown={(e) => {
+        if (editable) pointerDownPos.current = { x: e.clientX, y: e.clientY };
+      }}
       onMouseMove={(e) => {
         if (!editable) return;
         const el = e.currentTarget as HTMLElement;
+        if (decoMode) { el.style.cursor = "crosshair"; return; }
         const r = el.getBoundingClientRect();
         const px = ((e.clientX - r.left) / r.width) * 100;
         const py = ((e.clientY - r.top) / r.height) * 100;
@@ -147,6 +154,14 @@ const FloorMap = forwardRef<HTMLDivElement, Props>(function FloorMap(
       }}
       onClick={(e) => {
         if (!editable || !onClickMap) return;
+        // pointerdown 위치 소비 후 초기화 — 5px 이상 이동 시 드래그(패닝)로 판단해 무시
+        const down = pointerDownPos.current;
+        pointerDownPos.current = null;
+        if (down) {
+          const dx = e.clientX - down.x;
+          const dy = e.clientY - down.y;
+          if (dx * dx + dy * dy > 25) return;
+        }
         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
         const x = (e.clientX - r.left) / r.width;
         const y = (e.clientY - r.top) / r.height;

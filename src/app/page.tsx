@@ -13,7 +13,7 @@ import type { Item, ItemInput, Decoration } from "@/lib/types";
 import {
   createItem,
   deleteItem,
-  fetchItems,
+  subscribeItems,
   updateItem,
   updateItemPosition,
   updateItemShelf,
@@ -21,7 +21,7 @@ import {
 import {
   createDecoration,
   deleteDecoration,
-  fetchDecorations,
+  subscribeDecorations,
   updateDecorationGeometry,
 } from "@/lib/decorations";
 import { isFirebaseConfigured } from "@/lib/firebase";
@@ -80,23 +80,16 @@ export default function Home() {
   const [form, setForm] = useState<FormState | null>(null);
   const [pendingAddPos, setPendingAddPos] = useState<{ x: number; y: number } | null>(null);
 
-  // 수납장 추가 후 재선택을 위한 pending 좌표
-  const pendingCabinetPos = useRef<{
-    building: BuildingId;
-    floor: number;
-    key: string;
-  } | null>(null);
-
   const canEdit = editMode && auth.isSchoolUser;
 
   useEffect(() => {
     if (!isFirebaseConfigured) return;
-    fetchItems()
-      .then(setItems)
-      .catch((e) => setLoadError(e.message ?? "불러오기 실패"));
-    fetchDecorations()
-      .then(setDecorations)
-      .catch(() => {});
+    const unsubItems = subscribeItems(
+      setItems,
+      (e) => setLoadError(e.message ?? "불러오기 실패")
+    );
+    const unsubDecos = subscribeDecorations(setDecorations);
+    return () => { unsubItems(); unsubDecos(); };
   }, []);
 
   useEffect(() => {
@@ -111,32 +104,15 @@ export default function Home() {
     }
   }, [canEdit]);
 
-  // 아이템 변경 시 selectedCabinet 동기화 + pendingCabinetPos 처리
+  // items 변경 시 열린 수납장 동기화 (onSnapshot 실시간 반영)
   useEffect(() => {
-    // pending: 저장 직후 해당 위치의 그룹을 다시 선택
-    const pending = pendingCabinetPos.current;
-    if (pending) {
-      pendingCabinetPos.current = null;
-      const group = items.filter(
-        (x) =>
-          x.building === pending.building &&
-          x.floor === pending.floor &&
-          posKey(x) === pending.key
-      );
-      if (group.length > 0) {
-        group.sort((a, b) => (a.shelf ?? 9999) - (b.shelf ?? 9999));
-        setSelectedCabinet(group);
-        return;
-      }
-    }
-    // 이미 열린 수납장: 동기화 (수정/삭제 반영)
-    if (!selectedCabinet) return;
-    const ids = new Set(selectedCabinet.map((it) => it.id));
-    const updated = items.filter((it) => ids.has(it.id));
-    updated.sort((a, b) => (a.shelf ?? 9999) - (b.shelf ?? 9999));
-    if (updated.length === 0) setSelectedCabinet(null);
-    else setSelectedCabinet(updated);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    setSelectedCabinet((current) => {
+      if (!current) return null;
+      const ids = new Set(current.map((it) => it.id));
+      const updated = items.filter((it) => ids.has(it.id));
+      updated.sort((a, b) => (a.shelf ?? 9999) - (b.shelf ?? 9999));
+      return updated.length === 0 ? null : updated;
+    });
   }, [items]);
 
   const counts = useMemo(() => {
@@ -241,15 +217,19 @@ export default function Home() {
   async function handleSave(input: ItemInput, id?: string) {
     if (id) {
       const updated = await updateItem(id, input, auth.email);
+      // 낙관적 업데이트 (onSnapshot이 곧 확정 데이터로 덮어씀)
       setItems((prev) => prev.map((it) => (it.id === id ? updated : it)));
     } else {
       const created = await createItem(input, auth.email);
-      // 저장 후 해당 위치 수납장을 다시 선택하도록 pending 설정
-      pendingCabinetPos.current = {
-        building: created.building,
-        floor: created.floor,
-        key: posKey(created),
-      };
+      // 같은 위치 기존 아이템 + 새 아이템으로 수납장 즉시 열기
+      const k = posKey(created);
+      const samePos = items.filter(
+        (x) => x.building === created.building && x.floor === created.floor && posKey(x) === k
+      );
+      const group = [...samePos, created];
+      group.sort((a, b) => (a.shelf ?? 9999) - (b.shelf ?? 9999));
+      setSelectedCabinet(group);
+      // 낙관적 업데이트 (onSnapshot이 곧 전체 목록으로 덮어씀)
       setItems((prev) => [...prev, created]);
     }
     setForm(null);
@@ -470,8 +450,8 @@ export default function Home() {
                     ))}
                   </div>
 
-                  <p className="mb-2 text-xs text-gray-400">지도를 클릭해 도형을 배치하세요</p>
-                  <p className="mb-2 text-xs text-gray-400">기존 도형 클릭 → 삭제</p>
+                  <p className="mb-2 text-xs text-gray-400">빈 곳 클릭 → 새 도형 배치</p>
+                  <p className="mb-2 text-xs text-gray-400">기존 도형 드래그 → 이동 / 꼭짓점 → 크기 조절</p>
                   <button
                     onClick={() => setDecoPanel(false)}
                     className="w-full rounded-lg bg-gray-100 py-1.5 text-sm font-semibold text-gray-600 hover:bg-gray-200"

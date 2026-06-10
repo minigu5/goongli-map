@@ -11,6 +11,7 @@ import {
   serverTimestamp,
   query,
   orderBy,
+  onSnapshot,
   Timestamp,
 } from "firebase/firestore";
 import { getFirebaseDb } from "./firebase";
@@ -48,6 +49,20 @@ export async function fetchItems(): Promise<Item[]> {
   const q = query(collection(db, "items"), orderBy("created_at", "asc"));
   const snap = await getDocs(q);
   return snap.docs.map((d) => toItem(d.id, d.data() as Record<string, unknown>));
+}
+
+export function subscribeItems(
+  callback: (items: Item[]) => void,
+  onError?: (err: Error) => void
+): () => void {
+  const db = getFirebaseDb();
+  if (!db) { callback([]); return () => {}; }
+  const q = query(collection(db, "items"), orderBy("created_at", "asc"));
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => toItem(d.id, d.data() as Record<string, unknown>))),
+    onError
+  );
 }
 
 export async function createItem(

@@ -7,6 +7,7 @@ import {
   deleteDoc,
   updateDoc,
   doc,
+  onSnapshot,
 } from "firebase/firestore";
 import { getFirebaseDb } from "./firebase";
 import type { Decoration } from "./types";
@@ -16,6 +17,19 @@ export async function fetchDecorations(): Promise<Decoration[]> {
   if (!db) return [];
   const snap = await getDocs(collection(db, "decorations"));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Decoration));
+}
+
+export function subscribeDecorations(
+  callback: (decos: Decoration[]) => void,
+  onError?: (err: Error) => void
+): () => void {
+  const db = getFirebaseDb();
+  if (!db) { callback([]); return () => {}; }
+  return onSnapshot(
+    collection(db, "decorations"),
+    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Decoration))),
+    onError
+  );
 }
 
 export async function createDecoration(

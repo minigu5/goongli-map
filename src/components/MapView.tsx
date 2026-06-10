@@ -69,6 +69,18 @@ export default function MapView({
   } | null>(null);
   const lastResizeValues = useRef<{ id: string; x: number; y: number; w: number; h: number } | null>(null);
 
+  // 도형 이동(드래그) 상태
+  const [decoMovingInfo, setDecoMovingInfo] = useState<{
+    id: string;
+    offsetX: number;
+    offsetY: number;
+    deco: Decoration;
+  } | null>(null);
+  const decoMoveMoved = useRef(false);
+
+  // 드래그 직후 클릭 이벤트가 FloorMap에 전달되는 것을 막기 위한 플래그
+  const justDraggedRef = useRef(false);
+
   // 같은 위치 아이템을 수납장 그룹으로 묶기 (shelf 순 정렬)
   const cabinets = useMemo(() => {
     const map = new Map<string, Item[]>();
@@ -123,6 +135,7 @@ export default function MapView({
     }
     function onUp() {
       if (dragMoved.current && lastPos.current) {
+        justDraggedRef.current = true;
         onMoveEnd(draggingIds, lastPos.current.x, lastPos.current.y);
       }
       lastPos.current = null;
@@ -173,6 +186,7 @@ export default function MapView({
 
     function onUp() {
       if (lastResizeValues.current) {
+        justDraggedRef.current = true;
         const { id, x, y, w, h } = lastResizeValues.current;
         onResizeDecoEnd(id, x, y, w, h);
         lastResizeValues.current = null;
@@ -187,6 +201,38 @@ export default function MapView({
       window.removeEventListener("pointerup", onUp);
     };
   }, [resizingInfo, plan.ratio, relFromEvent, onResizeDeco, onResizeDecoEnd]);
+
+  // 도형 이동 드래그 처리
+  useEffect(() => {
+    if (!decoMovingInfo) return;
+    function onMoveEv(e: PointerEvent) {
+      decoMoveMoved.current = true;
+      const p = relFromEvent(e.clientX, e.clientY);
+      if (!p) return;
+      const nx = Math.min(1, Math.max(0, p.x - decoMovingInfo!.offsetX));
+      const ny = Math.min(1, Math.max(0, p.y - decoMovingInfo!.offsetY));
+      onResizeDeco(decoMovingInfo!.id, nx, ny, decoMovingInfo!.deco.w, decoMovingInfo!.deco.h);
+    }
+    function onUp(e: PointerEvent) {
+      if (decoMoveMoved.current) {
+        justDraggedRef.current = true;
+        const p = relFromEvent(e.clientX, e.clientY);
+        if (p) {
+          const nx = Math.min(1, Math.max(0, p.x - decoMovingInfo!.offsetX));
+          const ny = Math.min(1, Math.max(0, p.y - decoMovingInfo!.offsetY));
+          onResizeDecoEnd(decoMovingInfo!.id, nx, ny, decoMovingInfo!.deco.w, decoMovingInfo!.deco.h);
+        }
+      }
+      decoMoveMoved.current = false;
+      setDecoMovingInfo(null);
+    }
+    window.addEventListener("pointermove", onMoveEv);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMoveEv);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [decoMovingInfo, relFromEvent, onResizeDeco, onResizeDecoEnd]);
 
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
@@ -218,7 +264,7 @@ export default function MapView({
         centerOnInit
         doubleClick={{ disabled: true }}
         wheel={{ step: 0.05 }}
-        panning={{ disabled: draggingIds.length > 0 || resizingInfo !== null }}
+        panning={{ disabled: draggingIds.length > 0 || resizingInfo !== null || decoMovingInfo !== null }}
       >
         <TransformComponent
           wrapperStyle={{ width: "100%", height: "100%" }}
@@ -246,8 +292,16 @@ export default function MapView({
               <FloorMap
                 ref={mapRef}
                 plan={plan}
-                editable={editMode && !decoMode}
-                onClickMap={(x, y) => onAddAt(x, y)}
+                editable={editMode}
+                decoMode={!!decoMode}
+                onClickMap={(x, y) => {
+                  if (justDraggedRef.current) {
+                    justDraggedRef.current = false;
+                    return;
+                  }
+                  if (decoMode) onAddDecoration(x, y);
+                  else onAddAt(x, y);
+                }}
               />
 
               {/* 데코레이션 */}
@@ -259,7 +313,7 @@ export default function MapView({
                 const topPct = isCircle
                   ? (deco.y - (deco.w * plan.ratio) / 2) * 100
                   : (deco.y - deco.h / 2) * 100;
-                const canInteract = editMode && !decoMode;
+                const canInteract = editMode && !!decoMode;
 
                 return (
                   <div
@@ -273,7 +327,20 @@ export default function MapView({
                       height: isCircle ? `${deco.w * 100}cqw` : `${deco.h * 100}%`,
                       zIndex: canInteract ? 20 : 5,
                       pointerEvents: canInteract ? "auto" : "none",
+                      cursor: canInteract ? "move" : undefined,
                     }}
+                    onPointerDown={canInteract ? (e) => {
+                      e.stopPropagation();
+                      decoMoveMoved.current = false;
+                      const p = relFromEvent(e.clientX, e.clientY);
+                      if (!p) return;
+                      setDecoMovingInfo({
+                        id: deco.id,
+                        offsetX: p.x - deco.x,
+                        offsetY: p.y - deco.y,
+                        deco: { ...deco },
+                      });
+                    } : undefined}
                   >
                     {/* 도형 본체 */}
                     <div
@@ -319,22 +386,6 @@ export default function MapView({
                   </div>
                 );
               })}
-
-              {/* 도형 배치 오버레이 */}
-              {decoMode && (
-                <div
-                  className="absolute inset-0"
-                  style={{ zIndex: 50, cursor: "crosshair" }}
-                  onClick={(e) => {
-                    const el = mapRef.current;
-                    if (!el) return;
-                    const r = el.getBoundingClientRect();
-                    const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-                    const y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
-                    onAddDecoration(x, y);
-                  }}
-                />
-              )}
 
               {/* 수납장 핀: 아이템 수로 세로 등분, 선택된 상태에서만 드래그 */}
               {cabinets.flatMap((group) => {
